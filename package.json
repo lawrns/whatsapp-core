@@ -1,0 +1,35 @@
+{
+  "name": "@portfolio/whatsapp-core",
+  "version": "0.1.0",
+  "description": "Provider-agnostic WhatsApp messaging core: Meta Cloud API + Twilio adapters, 24h session window, webhook signature verification, inbound normalization, media persistence, and opt-out compliance. Shared dependency for bien, campfire-v2, hablo, mexicasa, cobros.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
