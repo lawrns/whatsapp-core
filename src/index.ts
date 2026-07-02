@@ -36,8 +36,9 @@ export {
   sessionExpiresAt,
   isWithinSession,
   canSend,
+  InMemorySessionStore,
 } from './session.js';
-export type { SessionState, SendDecision, SendGateReason } from './session.js';
+export type { SessionState, SendDecision, SendGateReason, SessionStore } from './session.js';
 
 // Media
 export { persistInboundMedia, InMemoryMediaStore } from './media.js';
@@ -66,3 +67,17 @@ export {
   InMemoryOptOutStore,
 } from './optout.js';
 export type { OptOutStore } from './optout.js';
+
+// Postgres-backed reference stores (Supabase/Postgres)
+export {
+  PostgresOptOutStore,
+  PostgresSessionStore,
+  PostgresMediaStore,
+  ensureWhatsAppCoreSchema,
+  whatsAppCoreSchemaSql,
+} from './store/postgres.js';
+export type {
+  SqlExecutor,
+  PostgresStoreOptions,
+  PostgresMediaStoreOptions,
+} from './store/postgres.js';
