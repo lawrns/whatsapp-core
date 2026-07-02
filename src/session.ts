@@ -101,3 +101,31 @@ export function canSend(
 
   return { allowed: true, templateRequired: false };
 }
+
+/**
+ * Persistence seam for session-window state, keyed by customer phone number
+ * (same normalized form used by {@link OptOutStore}). A process restart must
+ * not forget the last inbound message time — otherwise an out-of-window
+ * freeform send could slip through as if the customer had just written in.
+ */
+export interface SessionStore {
+  /** Current session state for a phone, or a fresh/empty one if never seen. */
+  get(phone: string): Promise<SessionState>;
+  /** Record an inbound message, opening/resetting the window; returns the new state. */
+  recordInbound(phone: string, inboundAt: Date | number): Promise<SessionState>;
+}
+
+/** In-memory {@link SessionStore} for tests and local dev. */
+export class InMemorySessionStore implements SessionStore {
+  private readonly sessions = new Map<string, SessionState>();
+
+  async get(phone: string): Promise<SessionState> {
+    return this.sessions.get(phone) ?? createSession();
+  }
+
+  async recordInbound(phone: string, inboundAt: Date | number): Promise<SessionState> {
+    const next = recordInbound(await this.get(phone), inboundAt);
+    this.sessions.set(phone, next);
+    return next;
+  }
+}
