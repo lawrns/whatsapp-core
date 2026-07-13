@@ -125,6 +125,72 @@ function buildInteractive(message: OutboundInteractive): Record<string, unknown>
   }
 }
 
+/**
+ * Build the Graph API request body for any outbound shape.
+ *
+ * Exported as a pure function so a consumer that already owns its transport
+ * (retries, timeouts, telemetry) can reuse the payload mapping without
+ * adopting this provider's `send`. Callers that skip {@link MetaWhatsAppProvider.send}
+ * must run {@link validateInteractive} themselves — this function does not validate.
+ */
+export function buildMetaPayload(message: OutboundMessage): Record<string, unknown> {
+  const base = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: message.to,
+  };
+
+  switch (message.kind) {
+    case 'text':
+      return {
+        ...base,
+        type: 'text',
+        text: {
+          preview_url: message.previewUrl ?? false,
+          body: message.body,
+        },
+      };
+    case 'template':
+      return {
+        ...base,
+        type: 'template',
+        template: {
+          name: message.templateName,
+          language: { code: message.languageCode },
+          ...(message.parameters && message.parameters.length > 0
+            ? {
+                components: [
+                  {
+                    type: 'body',
+                    parameters: message.parameters.map((text) => ({
+                      type: 'text',
+                      text,
+                    })),
+                  },
+                ],
+              }
+            : {}),
+        },
+      };
+    case 'media':
+      return {
+        ...base,
+        type: message.mediaKind,
+        [message.mediaKind]: {
+          link: message.url,
+          ...(message.caption !== undefined ? { caption: message.caption } : {}),
+          ...(message.filename !== undefined ? { filename: message.filename } : {}),
+        },
+      };
+    case 'interactive':
+      return {
+        ...base,
+        type: 'interactive',
+        interactive: buildInteractive(message),
+      };
+  }
+}
+
 export class MetaWhatsAppProvider implements WhatsAppProvider {
   readonly id = 'meta' as const;
   private readonly fetchImpl: FetchLike;
@@ -141,61 +207,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
   /** Build the Graph API request body for any outbound shape. */
   private buildBody(message: OutboundMessage): Record<string, unknown> {
-    const base = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: message.to,
-    };
-
-    switch (message.kind) {
-      case 'text':
-        return {
-          ...base,
-          type: 'text',
-          text: {
-            preview_url: message.previewUrl ?? false,
-            body: message.body,
-          },
-        };
-      case 'template':
-        return {
-          ...base,
-          type: 'template',
-          template: {
-            name: message.templateName,
-            language: { code: message.languageCode },
-            ...(message.parameters && message.parameters.length > 0
-              ? {
-                  components: [
-                    {
-                      type: 'body',
-                      parameters: message.parameters.map((text) => ({
-                        type: 'text',
-                        text,
-                      })),
-                    },
-                  ],
-                }
-              : {}),
-          },
-        };
-      case 'media':
-        return {
-          ...base,
-          type: message.mediaKind,
-          [message.mediaKind]: {
-            link: message.url,
-            ...(message.caption !== undefined ? { caption: message.caption } : {}),
-            ...(message.filename !== undefined ? { filename: message.filename } : {}),
-          },
-        };
-      case 'interactive':
-        return {
-          ...base,
-          type: 'interactive',
-          interactive: buildInteractive(message),
-        };
-    }
+    return buildMetaPayload(message);
   }
 
   async send(message: OutboundMessage): Promise<SendResult> {

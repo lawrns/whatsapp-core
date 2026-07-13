@@ -38,7 +38,7 @@ export { INTERACTIVE_LIMITS } from './types.js';
 export { validateInteractive } from './interactive.js';
 
 // Providers
-export { MetaWhatsAppProvider } from './providers/meta.js';
+export { MetaWhatsAppProvider, buildMetaPayload } from './providers/meta.js';
 export { TwilioWhatsAppProvider } from './providers/twilio.js';
 
 // Session window
