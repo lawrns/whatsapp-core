@@ -2,7 +2,7 @@
  * Meta WhatsApp Cloud API provider adapter.
  *
  * Responsibilities:
- *  - send text / template / media via the Graph API.
+ *  - send text / template / media / interactive via the Graph API.
  *  - normalize inbound webhook payloads into {@link InboundMessage}.
  *  - resolve inbound media ids into downloadable URLs (for {@link MediaStore}).
  *
@@ -10,11 +10,13 @@
  */
 
 import type { MediaResolver } from '../media.js';
+import { validateInteractive } from '../interactive.js';
 import type {
   FetchLike,
   InboundContentType,
   InboundMessage,
   MetaProviderConfig,
+  OutboundInteractive,
   OutboundMessage,
   SendResult,
   WhatsAppProvider,
@@ -56,6 +58,139 @@ function mapContentType(metaType: string): InboundContentType {
   }
 }
 
+/** Map an interactive message onto Meta's `interactive` object. */
+function buildInteractive(message: OutboundInteractive): Record<string, unknown> {
+  const shell = {
+    ...(message.header ? { header: { type: 'text', text: message.header } } : {}),
+    body: { text: message.body },
+    ...(message.footer ? { footer: { text: message.footer } } : {}),
+  };
+
+  switch (message.interactive) {
+    case 'buttons':
+      return {
+        type: 'button',
+        ...shell,
+        action: {
+          buttons: message.buttons.map((b) => ({
+            type: 'reply',
+            reply: { id: b.id, title: b.title },
+          })),
+        },
+      };
+    case 'list':
+      return {
+        type: 'list',
+        ...shell,
+        action: {
+          button: message.buttonText,
+          sections: message.sections.map((s) => ({
+            title: s.title,
+            rows: s.rows.map((r) => ({
+              id: r.id,
+              title: r.title,
+              ...(r.description ? { description: r.description } : {}),
+            })),
+          })),
+        },
+      };
+    case 'cta_url':
+      return {
+        type: 'cta_url',
+        ...shell,
+        action: {
+          name: 'cta_url',
+          parameters: { display_text: message.displayText, url: message.url },
+        },
+      };
+    case 'flow':
+      return {
+        type: 'flow',
+        ...shell,
+        action: {
+          name: 'flow',
+          parameters: {
+            flow_message_version: '3',
+            flow_id: message.flowId,
+            flow_cta: message.ctaText,
+            flow_token: message.flowToken,
+            flow_action: 'navigate',
+            flow_action_payload: {
+              screen: message.screen,
+              ...(message.flowActionPayload ? { data: message.flowActionPayload } : {}),
+            },
+          },
+        },
+      };
+  }
+}
+
+/**
+ * Build the Graph API request body for any outbound shape.
+ *
+ * Exported as a pure function so a consumer that already owns its transport
+ * (retries, timeouts, telemetry) can reuse the payload mapping without
+ * adopting this provider's `send`. Callers that skip {@link MetaWhatsAppProvider.send}
+ * must run {@link validateInteractive} themselves — this function does not validate.
+ */
+export function buildMetaPayload(message: OutboundMessage): Record<string, unknown> {
+  const base = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: message.to,
+  };
+
+  switch (message.kind) {
+    case 'text':
+      return {
+        ...base,
+        type: 'text',
+        text: {
+          preview_url: message.previewUrl ?? false,
+          body: message.body,
+        },
+      };
+    case 'template':
+      return {
+        ...base,
+        type: 'template',
+        template: {
+          name: message.templateName,
+          language: { code: message.languageCode },
+          ...(message.parameters && message.parameters.length > 0
+            ? {
+                components: [
+                  {
+                    type: 'body',
+                    parameters: message.parameters.map((text) => ({
+                      type: 'text',
+                      text,
+                    })),
+                  },
+                ],
+              }
+            : {}),
+        },
+      };
+    case 'media':
+      return {
+        ...base,
+        type: message.mediaKind,
+        [message.mediaKind]: {
+          link: message.url,
+          ...(message.caption !== undefined ? { caption: message.caption } : {}),
+          ...(message.filename !== undefined ? { filename: message.filename } : {}),
+        },
+      };
+    case 'interactive':
+      return {
+        ...base,
+        type: 'interactive',
+        interactive: buildInteractive(message),
+      };
+  }
+}
+
 export class MetaWhatsAppProvider implements WhatsAppProvider {
   readonly id = 'meta' as const;
   private readonly fetchImpl: FetchLike;
@@ -72,60 +207,20 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
   /** Build the Graph API request body for any outbound shape. */
   private buildBody(message: OutboundMessage): Record<string, unknown> {
-    const base = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: message.to,
-    };
-
-    switch (message.kind) {
-      case 'text':
-        return {
-          ...base,
-          type: 'text',
-          text: {
-            preview_url: message.previewUrl ?? false,
-            body: message.body,
-          },
-        };
-      case 'template':
-        return {
-          ...base,
-          type: 'template',
-          template: {
-            name: message.templateName,
-            language: { code: message.languageCode },
-            ...(message.parameters && message.parameters.length > 0
-              ? {
-                  components: [
-                    {
-                      type: 'body',
-                      parameters: message.parameters.map((text) => ({
-                        type: 'text',
-                        text,
-                      })),
-                    },
-                  ],
-                }
-              : {}),
-          },
-        };
-      case 'media':
-        return {
-          ...base,
-          type: message.mediaKind,
-          [message.mediaKind]: {
-            link: message.url,
-            ...(message.caption !== undefined ? { caption: message.caption } : {}),
-            ...(message.filename !== undefined ? { filename: message.filename } : {}),
-          },
-        };
-    }
+    return buildMetaPayload(message);
   }
 
   async send(message: OutboundMessage): Promise<SendResult> {
     if (!this.config.accessToken || !this.config.phoneNumberId) {
       return { success: false, error: 'Meta provider missing accessToken/phoneNumberId' };
+    }
+
+    // Fail here rather than as an opaque Graph 400 in front of a member.
+    if (message.kind === 'interactive') {
+      const errors = validateInteractive(message);
+      if (errors.length > 0) {
+        return { success: false, error: `Invalid interactive message: ${errors.join('; ')}` };
+      }
     }
 
     try {

@@ -133,8 +133,106 @@ export interface OutboundMedia {
   filename?: string;
 }
 
+/**
+ * Meta's hard limits on interactive messages. Exceeding any of these is a
+ * Graph API 400, so we enforce them before the request leaves the process.
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages
+ */
+export const INTERACTIVE_LIMITS = {
+  /** Reply buttons per message. */
+  maxButtons: 3,
+  buttonTitle: 20,
+  buttonId: 256,
+  /** Rows summed across every section of a list. */
+  maxListRows: 10,
+  listButton: 20,
+  rowTitle: 24,
+  rowDescription: 72,
+  sectionTitle: 24,
+  body: 1024,
+  header: 60,
+  footer: 60,
+} as const;
+
+/** A tappable reply button. Meta caps these at 3 per message. */
+export interface ReplyButton {
+  /** Echoed back on the inbound webhook when tapped. */
+  id: string;
+  title: string;
+}
+
+/** One selectable row inside a list message. */
+export interface ListRow {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+/** A named group of rows within a list message. */
+export interface ListSection {
+  title: string;
+  rows: ReadonlyArray<ListRow>;
+}
+
+interface OutboundInteractiveBase {
+  kind: 'interactive';
+  to: string;
+  body: string;
+  header?: string;
+  footer?: string;
+}
+
+/** Up to 3 quick-reply buttons. */
+export interface OutboundButtons extends OutboundInteractiveBase {
+  interactive: 'buttons';
+  buttons: ReadonlyArray<ReplyButton>;
+}
+
+/** A tap-to-open list of up to 10 rows. Use when you need >3 choices. */
+export interface OutboundList extends OutboundInteractiveBase {
+  interactive: 'list';
+  /** Label of the button that opens the list sheet. */
+  buttonText: string;
+  sections: ReadonlyArray<ListSection>;
+}
+
+/** A button that opens a URL — the escape hatch to the web app. */
+export interface OutboundCtaUrl extends OutboundInteractiveBase {
+  interactive: 'cta_url';
+  displayText: string;
+  url: string;
+}
+
+/**
+ * A WhatsApp Flow: Meta's native in-app form. This is the only way to collect
+ * typed input (numbers, selections) inside WhatsApp — chat bubbles cannot
+ * contain input fields.
+ */
+export interface OutboundFlow extends OutboundInteractiveBase {
+  interactive: 'flow';
+  flowId: string;
+  /** Label on the button that launches the Flow. */
+  ctaText: string;
+  /** Screen to open on. */
+  screen: string;
+  /** Opaque token echoed back with the Flow's completion payload. */
+  flowToken: string;
+  /** Initial data passed into the first screen. */
+  flowActionPayload?: Record<string, unknown>;
+}
+
+export type OutboundInteractive =
+  | OutboundButtons
+  | OutboundList
+  | OutboundCtaUrl
+  | OutboundFlow;
+
 /** Discriminated union of every outbound message shape. */
-export type OutboundMessage = OutboundText | OutboundTemplate | OutboundMedia;
+export type OutboundMessage =
+  | OutboundText
+  | OutboundTemplate
+  | OutboundMedia
+  | OutboundInteractive;
 
 /** Result of an outbound send attempt. */
 export interface SendResult {

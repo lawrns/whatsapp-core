@@ -16,6 +16,14 @@ export type {
   OutboundText,
   OutboundTemplate,
   OutboundMedia,
+  OutboundButtons,
+  OutboundList,
+  OutboundCtaUrl,
+  OutboundFlow,
+  OutboundInteractive,
+  ReplyButton,
+  ListRow,
+  ListSection,
   OutboundMessage,
   SendResult,
   FetchLike,
@@ -24,8 +32,13 @@ export type {
   WhatsAppProvider,
 } from './types.js';
 
+export { INTERACTIVE_LIMITS } from './types.js';
+
+// Interactive message validation
+export { validateInteractive } from './interactive.js';
+
 // Providers
-export { MetaWhatsAppProvider } from './providers/meta.js';
+export { MetaWhatsAppProvider, buildMetaPayload } from './providers/meta.js';
 export { TwilioWhatsAppProvider } from './providers/twilio.js';
 
 // Session window
