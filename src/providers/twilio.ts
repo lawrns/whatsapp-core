@@ -90,6 +90,11 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
         if (message.caption !== undefined) form.set('Body', message.caption);
         form.set('MediaUrl', message.url);
         break;
+      case 'interactive':
+        // Unreachable: send() rejects interactive before building the form.
+        // Twilio models buttons/lists as Content API templates, not inline
+        // payloads, so there is no faithful mapping here.
+        throw new Error('Twilio does not support inline interactive messages');
     }
 
     return form;
@@ -98,6 +103,15 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
   async send(message: OutboundMessage): Promise<SendResult> {
     if (!this.config.accountSid || !this.config.authToken || !this.config.fromNumber) {
       return { success: false, error: 'Twilio provider missing accountSid/authToken/fromNumber' };
+    }
+
+    if (message.kind === 'interactive') {
+      // Fail explicitly rather than silently posting an empty body.
+      return {
+        success: false,
+        error:
+          'Twilio provider does not support interactive messages (buttons/list/flow); use the Meta provider',
+      };
     }
 
     try {
