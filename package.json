@@ -26,7 +26,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare": "npm run build"
+    "prepare": "npm run build && git config core.hooksPath .githooks",
+    "secret-scan": "sh scripts/secret-scan.sh --tree"
   },
   "devDependencies": {
     "@types/node": "^20.12.7",

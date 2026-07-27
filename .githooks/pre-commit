@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Blocking secret scan. See scripts/secret-scan.sh for why it does not
+# soft-skip when gitleaks is missing.
+sh "$(git rev-parse --show-toplevel)/scripts/secret-scan.sh" || exit 1
