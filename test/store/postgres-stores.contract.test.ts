@@ -12,11 +12,17 @@ import {
   PostgresOptOutStore,
   PostgresSessionStore,
   PostgresMediaStore,
+  PostgresConsentLedger,
+  PostgresTemplateRegistry,
+  PostgresEscalationStore,
   ensureWhatsAppCoreSchema,
 } from '../../src/store/postgres.js';
 import { optOutStoreContract } from '../contract/opt-out-store.contract.js';
 import { sessionStoreContract } from '../contract/session-store.contract.js';
 import { mediaStoreContract } from '../contract/media-store.contract.js';
+import { consentLedgerContract } from '../contract/consent-ledger.contract.js';
+import { templateRegistryContract } from '../contract/template-registry.contract.js';
+import { escalationStoreContract } from '../contract/escalation-store.contract.js';
 
 const { Pool } = pg;
 
@@ -46,5 +52,17 @@ describe.skipIf(!DATABASE_URL)('Postgres-backed stores — contract', () => {
 
   describe('PostgresMediaStore', () => {
     mediaStoreContract(() => new PostgresMediaStore(pool, { schema: SCHEMA }));
+  });
+
+  describe('PostgresConsentLedger', () => {
+    consentLedgerContract(() => new PostgresConsentLedger(pool, { schema: SCHEMA }), 'pgc');
+  });
+
+  describe('PostgresTemplateRegistry', () => {
+    templateRegistryContract(() => new PostgresTemplateRegistry(pool, { schema: SCHEMA }), 'pgt');
+  });
+
+  describe('PostgresEscalationStore', () => {
+    escalationStoreContract(() => new PostgresEscalationStore(pool, { schema: SCHEMA }), 'pge');
   });
 });

@@ -86,6 +86,9 @@ export {
   PostgresOptOutStore,
   PostgresSessionStore,
   PostgresMediaStore,
+  PostgresConsentLedger,
+  PostgresTemplateRegistry,
+  PostgresEscalationStore,
   ensureWhatsAppCoreSchema,
   whatsAppCoreSchemaSql,
 } from './store/postgres.js';
@@ -94,3 +97,38 @@ export type {
   PostgresStoreOptions,
   PostgresMediaStoreOptions,
 } from './store/postgres.js';
+
+// Consent ledger (FYV-585)
+export {
+  InMemoryConsentLedger,
+  applyInboundCompliance,
+} from './consent.js';
+export type {
+  ConsentKind,
+  ConsentEvent,
+  ConsentStatus,
+  ConsentLedger,
+  ApplyInboundComplianceOptions,
+} from './consent.js';
+
+// Approved-template registry (FYV-585)
+export { InMemoryTemplateRegistry } from './templates.js';
+export type { TemplateApproval, TemplateRegistry } from './templates.js';
+
+// Send policy — consent + template + 24h window gate (FYV-585)
+export { evaluateSendPolicy } from './policy.js';
+export type {
+  SendPolicyReason,
+  SendPolicyResult,
+  SendPolicyMessage,
+  SendPolicyOptions,
+} from './policy.js';
+
+// Human escalation path (FYV-585)
+export { InMemoryEscalationStore } from './escalation.js';
+export type {
+  EscalationReason,
+  Escalation,
+  EscalationStore,
+  NewEscalation,
+} from './escalation.js';
