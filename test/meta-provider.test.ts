@@ -194,6 +194,98 @@ describe('MetaWhatsAppProvider.parseInbound', () => {
     };
     expect(provider.parseInbound(statusPayload)).toEqual([]);
   });
+
+  it('normalizes a button_reply interactive message', () => {
+    const payload = structuredClone(metaTextPayload);
+    payload.entry[0]!.changes[0]!.value.messages = [
+      {
+        from: '5215599998888',
+        id: 'wamid.BTN1',
+        timestamp: '1718625600',
+        type: 'interactive',
+        interactive: {
+          type: 'button_reply',
+          button_reply: { id: 'yes_confirm', title: 'Sí, confirmar' },
+        },
+      } as never,
+    ];
+    const provider = new MetaWhatsAppProvider(config(stubFetch(() => ({})).fetch));
+    const [msg] = provider.parseInbound(payload);
+    expect(msg!.contentType).toBe('interactive');
+    expect(msg!.text).toBe('Sí, confirmar');
+    expect(msg!.interaction).toEqual({
+      type: 'button_reply',
+      id: 'yes_confirm',
+      title: 'Sí, confirmar',
+    });
+  });
+
+  it('normalizes a list_reply interactive message', () => {
+    const payload = structuredClone(metaTextPayload);
+    payload.entry[0]!.changes[0]!.value.messages = [
+      {
+        from: '5215599998888',
+        id: 'wamid.LST1',
+        timestamp: '1718625600',
+        type: 'interactive',
+        interactive: {
+          type: 'list_reply',
+          list_reply: { id: 'row_3', title: 'Carnitas por kilo' },
+        },
+      } as never,
+    ];
+    const provider = new MetaWhatsAppProvider(config(stubFetch(() => ({})).fetch));
+    const [msg] = provider.parseInbound(payload);
+    expect(msg!.interaction).toEqual({
+      type: 'list_reply',
+      id: 'row_3',
+      title: 'Carnitas por kilo',
+    });
+  });
+
+  it('normalizes a flow_reply with response_json payload', () => {
+    const payload = structuredClone(metaTextPayload);
+    payload.entry[0]!.changes[0]!.value.messages = [
+      {
+        from: '5215599998888',
+        id: 'wamid.FLW1',
+        timestamp: '1718625600',
+        type: 'interactive',
+        interactive: {
+          type: 'flow_reply',
+          flow_reply: {
+            id: 'flow_btn_1',
+            response_json: '{"street":"Av Reforma 123"}',
+          },
+        },
+      } as never,
+    ];
+    const provider = new MetaWhatsAppProvider(config(stubFetch(() => ({})).fetch));
+    const [msg] = provider.parseInbound(payload);
+    expect(msg!.interaction).toEqual({
+      type: 'flow_reply',
+      id: 'flow_btn_1',
+      responseJson: '{"street":"Av Reforma 123"}',
+    });
+    expect(msg!.text).toBe('');
+  });
+
+  it('normalizes an unrecognized interactive type as unknown', () => {
+    const payload = structuredClone(metaTextPayload);
+    payload.entry[0]!.changes[0]!.value.messages = [
+      {
+        from: '5215599998888',
+        id: 'wamid.UNK1',
+        timestamp: '1718625600',
+        type: 'interactive',
+        interactive: { type: 'catalog_reply', catalog_reply: { id: 'cat_1' } },
+      } as never,
+    ];
+    const provider = new MetaWhatsAppProvider(config(stubFetch(() => ({})).fetch));
+    const [msg] = provider.parseInbound(payload);
+    expect(msg!.interaction?.type).toBe('unknown');
+    expect(msg!.interaction?.id).toBeUndefined();
+  });
 });
 
 describe('MetaWhatsAppProvider.mediaResolver', () => {
