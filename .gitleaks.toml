@@ -1,0 +1,344 @@
+# ---------------------------------------------------------------------------
+# Portfolio secret-scanning config (shared baseline)
+#
+# WHY THIS FILE LOOKS THE WAY IT DOES
+# -----------------------------------
+# Every live credential found in the 2026-07-26 portfolio audit sat in a file
+# type or directory that the previous scanners were scoped to SKIP: `.md`,
+# `.yml`, `.sh`, `docs/`, `archive/`, `artifacts/`, `.github/`, `.claude/`.
+# So there are two rules for maintaining this file:
+#
+#   1. NEVER silence a finding by excluding a directory or a file extension.
+#      Allowlist the *specific* known-safe value, or pin the finding's
+#      fingerprint in `.gitleaksignore` with a rotation TODO.
+#   2. NEVER add `continue-on-error` to the job that runs this. A scanner that
+#      cannot fail is a scanner that is not running.
+#
+# Scan tree:  gitleaks dir . --config .gitleaks.toml --redact
+# Scan range: gitleaks git . --config .gitleaks.toml --redact --log-opts="A..B"
+# Pre-commit: gitleaks protect --staged --config .gitleaks.toml --redact
+# ---------------------------------------------------------------------------
+
+title = "Portfolio Secret Scanner"
+
+[extend]
+useDefault = true
+
+# ===========================================================================
+# Rules: the three shapes that were invisible to all thirteen repos
+# ===========================================================================
+
+[[rules]]
+id = "portfolio-sk-40hex"
+description = "Generic `sk_<40 hex>` service key (Appwrite/Apify/self-issued)"
+regex = '''\bsk_[a-f0-9]{40}\b'''
+keywords = ["sk_"]
+tags = ["api-key", "portfolio"]
+
+[[rules]]
+id = "portfolio-zhipu-glm-key"
+description = "Zhipu / GLM API key (<32 hex>.<16 alnum>)"
+regex = '''\b[a-f0-9]{32}\.[A-Za-z0-9]{16}\b'''
+tags = ["api-key", "zhipu", "glm"]
+
+[[rules]]
+id = "portfolio-twilio-account-sid"
+description = "Twilio Account SID (AC<32 hex>) — check for a paired auth token"
+regex = '''\bAC[a-f0-9]{32}\b'''
+keywords = ["AC"]
+tags = ["twilio"]
+
+[[rules]]
+id = "portfolio-twilio-api-key-sid"
+description = "Twilio API Key SID (SK<32 hex>)"
+regex = '''\bSK[a-f0-9]{32}\b'''
+keywords = ["SK"]
+tags = ["twilio"]
+
+[[rules]]
+id = "portfolio-twilio-auth-token"
+description = "Twilio auth token (bare 32 hex bound to a twilio-ish identifier)"
+regex = '''(?i)\b(?:twilio[_-]?(?:auth[_-]?token|token|secret)|auth[_-]?token)\b["']?\s*[:=]\s*["']?([a-f0-9]{32})\b'''
+secretGroup = 1
+keywords = ["twilio", "auth_token", "authtoken", "auth-token", "authToken"]
+tags = ["twilio"]
+
+# ===========================================================================
+# Rules: Supabase JWTs matched on the decoded `role` claim, not the eyJ prefix.
+# The alternations below are base64url of `"role":"service_role"` / `"role":"anon"`
+# at all three byte alignments, so they match wherever the claim lands.
+# ===========================================================================
+
+[[rules]]
+id = "portfolio-supabase-service-role-jwt"
+description = "Supabase service_role JWT (role claim decoded from the payload)"
+regex = '''\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*(?:nJvbGUiOiJzZXJ2aWNlX3JvbG|yb2xlIjoic2VydmljZV9yb2xl|cm9sZSI6InNlcnZpY2Vfcm9sZ|nJvbGUiOiAic2VydmljZV9yb2xl|yb2xlIjogInNlcnZpY2Vfcm9sZ|cm9sZSI6ICJzZXJ2aWNlX3JvbG)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{10,}'''
+keywords = ["eyJ"]
+tags = ["api-key", "supabase", "critical"]
+
+[[rules]]
+id = "portfolio-supabase-anon-jwt"
+description = "Supabase anon JWT (role claim decoded from the payload)"
+regex = '''\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*(?:nJvbGUiOiJhbm9u|yb2xlIjoiYW5vb|cm9sZSI6ImFub2|nJvbGUiOiAiYW5vb|yb2xlIjogImFub2|cm9sZSI6ICJhbm9u)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{10,}'''
+keywords = ["eyJ"]
+tags = ["api-key", "supabase"]
+
+# ===========================================================================
+# Rules: named providers used across the portfolio
+# ===========================================================================
+
+[[rules]]
+id = "portfolio-db-url-with-password"
+description = "postgres:// / mysql:// URL with an inline password"
+# The password class deliberately allows `@` (greedy to the LAST `@`) —
+# real passwords contain it, and stopping at the first `@` is how a live
+# production DSN slipped past the previous rule.
+regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mariadb)://[a-z0-9_.\-]+:[^\s'"/<>{}$\[\]]{6,}@[a-z0-9_.\-]+'''
+keywords = ["postgres://", "postgresql://", "mysql://", "mariadb://"]
+tags = ["password", "database"]
+
+[[rules]]
+id = "portfolio-redis-url-with-password"
+description = "redis:// / rediss:// URL with an inline password"
+regex = '''(?i)\brediss?://[a-z0-9_.\-]*:[^\s'"/<>{}$\[\]]{8,}@[a-z0-9_.\-]+'''
+keywords = ["redis://", "rediss://"]
+tags = ["password", "redis"]
+
+[[rules]]
+id = "portfolio-mongodb-url-with-password"
+description = "mongodb:// URL with an inline password"
+regex = '''(?i)\bmongodb(?:\+srv)?://[a-z0-9_.\-]+:[^\s'"/<>{}$\[\]]{8,}@[a-z0-9_.\-]+'''
+keywords = ["mongodb://", "mongodb+srv://"]
+tags = ["password", "database"]
+
+[[rules]]
+id = "portfolio-stripe-live-secret"
+description = "Stripe live secret / restricted key"
+regex = '''\b(?:sk|rk)_live_[A-Za-z0-9]{20,}'''
+keywords = ["sk_live_", "rk_live_"]
+tags = ["api-key", "stripe", "critical"]
+
+[[rules]]
+id = "portfolio-stripe-test-secret"
+description = "Stripe test secret / restricted key"
+regex = '''\b(?:sk|rk)_test_[A-Za-z0-9]{20,}'''
+keywords = ["sk_test_", "rk_test_"]
+tags = ["api-key", "stripe"]
+
+[[rules]]
+id = "portfolio-stripe-webhook-secret"
+description = "Stripe webhook signing secret"
+regex = '''\bwhsec_[A-Za-z0-9]{24,}'''
+keywords = ["whsec_"]
+tags = ["api-key", "stripe"]
+
+[[rules]]
+id = "portfolio-openai-api-key"
+description = "OpenAI API key (sk- / sk-proj- / sk-svcacct-)"
+regex = '''\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{32,}\b'''
+keywords = ["sk-"]
+tags = ["api-key", "openai"]
+
+[[rules]]
+id = "portfolio-anthropic-api-key"
+description = "Anthropic API key"
+regex = '''\bsk-ant-[A-Za-z0-9_-]{20,}'''
+keywords = ["sk-ant-"]
+tags = ["api-key", "anthropic"]
+
+[[rules]]
+id = "portfolio-openrouter-api-key"
+description = "OpenRouter API key"
+regex = '''\bsk-or-(?:v1-)?[A-Za-z0-9]{32,}'''
+keywords = ["sk-or-"]
+tags = ["api-key", "openrouter"]
+
+[[rules]]
+id = "portfolio-resend-api-key"
+description = "Resend API key"
+regex = '''\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9]{16,}'''
+keywords = ["re_"]
+tags = ["api-key", "resend"]
+
+[[rules]]
+id = "portfolio-github-token"
+description = "GitHub token (ghp_/gho_/ghu_/ghs_/ghr_/github_pat_)"
+regex = '''\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]
+tags = ["api-key", "github", "critical"]
+
+[[rules]]
+id = "portfolio-appwrite-server-key"
+description = "Appwrite server API key"
+regex = '''\bstandard_[a-f0-9]{60,}\b'''
+keywords = ["standard_"]
+tags = ["api-key", "appwrite", "critical"]
+
+[[rules]]
+id = "portfolio-apify-token"
+description = "Apify API token"
+regex = '''\bapify_api_[A-Za-z0-9]{30,}'''
+keywords = ["apify_api_"]
+tags = ["api-key", "apify"]
+
+[[rules]]
+id = "portfolio-google-api-key"
+description = "Google API key (Maps/Places/Gemini)"
+regex = '''\bAIza[0-9A-Za-z_-]{35}\b'''
+keywords = ["AIza"]
+tags = ["api-key", "google"]
+
+[[rules]]
+id = "portfolio-telegram-bot-token"
+description = "Telegram bot token"
+regex = '''\b[0-9]{8,12}:AA[A-Za-z0-9_-]{33}\b'''
+keywords = [":AA"]
+tags = ["api-key", "telegram"]
+
+[[rules]]
+id = "portfolio-vapid-private-key"
+description = "VAPID private key (web push)"
+regex = '''(?i)vapid_private_key["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{40,})'''
+secretGroup = 1
+keywords = ["vapid_private_key", "VAPID_PRIVATE_KEY"]
+tags = ["api-key", "vapid"]
+
+# ===========================================================================
+# Allowlists — SPECIFIC known-safe VALUES only.
+#
+# Adding a directory or a file extension here re-opens the exact hole that let
+# the 2026-07-26 leaks through. If you are tempted to: don't. Allowlist the
+# value, or pin the fingerprint in `.gitleaksignore`.
+# ===========================================================================
+
+[[allowlists]]
+description = "Vendor-published example credentials (safe by publication)"
+regexes = [
+  # AWS's own documentation credentials
+  '''AKIAIOSFODNN7EXAMPLE''',
+  '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
+  # Stripe test card + publishable keys. `pk_` is public by design, always.
+  '''4242424242424242''',
+  '''\bpk_(?:test|live)_[A-Za-z0-9]{8,}''',
+  # Mapbox / other `pk.eyJ` publishable tokens are public by design
+  '''\bpk\.eyJ[A-Za-z0-9_.-]+''',
+  # Supabase's shipped local-dev demo keys (iss/ref = "supabase-demo").
+  # Base64url of `"iss":"supabase-demo"` at all three alignments.
+  '''ref=supabase-demo''',
+  '''(?:mlzcyI6InN1cGFiYXNlLWRlbW|pc3MiOiJzdXBhYmFzZS1kZW1v|aXNzIjoic3VwYWJhc2UtZGVtb)''',
+  # Twilio's zero-filled documentation SIDs
+  '''\b(?:AC|SK|MG|PN|SM|CA|IS)0{30,}\b''',
+]
+
+[[allowlists]]
+description = "Elided / redacted values in documentation"
+regexes = [
+  '''\.{3,}''',
+  '''…''',
+  '''(?i)\b(?:REDACTED|SCRUBBED|EXAMPLE_ONLY|DO_NOT_USE|OMITTED|SNIPPED)[A-Z0-9_]*''',
+  '''\*{4,}''',
+  '''x{8,}''',
+]
+
+[[allowlists]]
+description = "Template / placeholder syntax — a value that is obviously not a value"
+regexes = [
+  '''(?i)\b(?:your|my|the|some)[-_ ]?(?:api[-_ ]?key|secret|token|password|project|org|id)\b''',
+  '''(?i)\b(?:xxx+|yyy+|zzz+|aaaa+|abcdef123456|0123456789abcdef|1234567890abcdef)\b''',
+  '''(?i)\b(?:changeme|change[-_]me|placeholder|dummy|fake|sample|notreal|replace[-_ ]?me|fill[-_ ]?me|insert[-_ ]?here|todo|tbd|noop)\b''',
+  '''(?i)\b(?:test|tests|testing|mock|mocked|stub|fixture|fixtures|example|examples|demo|seed|sandbox|local|localhost|dev|devel|development)[-_]''',
+  '''(?i)[-_](?:test|mock|fixture|example|demo|sample|placeholder|dummy)\b''',
+  # ${VAR}, $VAR, {{VAR}}, <VAR>, %VAR%, __VAR__, :VAR substitution markers
+  '''\$\{?[A-Za-z_][A-Za-z0-9_]*\}?''',
+  '''\{\{\s*[A-Za-z_][A-Za-z0-9_.]*\s*\}\}''',
+  '''<[A-Za-z0-9_ .\-]{2,40}>''',
+  '''%[A-Za-z_]{3,}%''',
+  '''__[A-Z_]{3,}__''',
+  '''\[[A-Za-z_ -]{3,30}\]''',
+]
+
+[[allowlists]]
+description = "Local / CI throwaway database credentials"
+regexes = [
+  '''(?i)://[a-z0-9_.\-]+:(?:postgres|password|passwd|pass|root|mysql|user|secret|test|test_password|testing|example|dummy|local|dev|admin|credential[s]?|fixture)@''',
+  '''(?i)@(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[?::1\]?|db|postgres|postgresql|mysql|mariadb|redis|host\.docker\.internal|[a-z0-9_-]+\.local|[a-z0-9_-]*test[a-z0-9_-]*)(?::\d+)?[/\s"']''',
+  # The host alternatives below are anchored to the END of the host — without
+  # that, a bare `db` alternative also matches `@db.<project-ref>.supabase.co`,
+  # which would allowlist every production Supabase DSN in the portfolio.
+  '''(?i)://[a-z0-9_.\-]+:[^@\s]*@(?:localhost|127\.0\.0\.1|0\.0\.0\.0|db|postgres|postgresql|mysql|mariadb|host\.docker\.internal)(?::\d+)?(?:[/?"'\s]|$)''',
+]
+
+[[allowlists]]
+description = "Obvious non-credential OpenAI/Stripe-shaped literals used in tests and docs"
+regexes = [
+  '''\bsk-(?:proj-)?(?:test|fake|dummy|example|sample|abc|xyz|1234|0000|your)[A-Za-z0-9_-]*''',
+  '''\bsk-[0-9]{10,}''',
+  '''\b(?:sk|rk|pk)_(?:test|live)_(?:abc|xyz|123|test|fake|dummy|example)[A-Za-z0-9]*''',
+]
+
+# JWTs whose payload segment is too short to carry a credential-bearing claim
+# set are test fixtures (`{"valid":true}`, `{"sub":"1234567890",...}`). The
+# role-claim rules above cover real Supabase keys independently of this.
+[[allowlists]]
+description = "Tiny-payload JWT test fixtures (anchored to a whole JWT, so it cannot leak into any other rule)"
+regexes = ['''^ey[A-Za-z0-9_-]{10,}\.ey[A-Za-z0-9_-]{0,84}\.[A-Za-z0-9_-]*={0,2}$''']
+
+[[allowlists]]
+description = "Values that are public by design (published to browsers or to a well-known URL)"
+regexes = [
+  # Google reCAPTCHA *site* keys are rendered into every page that uses them
+  '''\b6L[A-Za-z0-9_-]{38}\b''',
+  # `pk_`-prefixed publishable / widget keys (Stripe, campfire widget) ship in
+  # client bundles and customer HTML snippets. The `sk_` sibling is NOT here.
+  '''\bpk_[A-Za-z0-9]{16,}\b''',
+  # Stripe PaymentIntent client secrets in tests
+  '''\bpi_[A-Za-z0-9_]*secret[A-Za-z0-9_-]*''',
+]
+
+[[allowlists]]
+description = "IndexNow keys are, by protocol, served unauthenticated at /<key>.txt"
+regexTarget = "line"
+regexes = ['''(?i)indexnow[_-]?key''']
+
+[[allowlists]]
+description = "Bare UUIDs and obvious counting sequences"
+regexes = [
+  '''^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$''',
+  '''\b(?:0123456789|abcdef0123|a1b2c3d4e5|1234abcd)[A-Za-z0-9]*\b''',
+  '''(?i)\bYOUR[-_ ][A-Z0-9_]{3,}\b''',
+]
+
+[[allowlists]]
+description = "Build outputs, lockfiles and binaries — no source of truth lives here"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.git/''',
+  '''(^|/)(?:dist|build|out|coverage|\.next|\.nuxt|\.turbo|\.svelte-kit|\.vercel|target|vendor|__pycache__)/''',
+  '''(^|/)(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|bun\.lockb|deno\.lock|Cargo\.lock|poetry\.lock|composer\.lock|go\.sum|Gemfile\.lock|uv\.lock)$''',
+  '''\.(?:png|jpe?g|gif|webp|avif|ico|svg|mp3|mp4|wav|woff2?|ttf|eot|otf|pdf|zip|gz|tgz|br|wasm|map|min\.js|min\.css)$''',
+  # This file necessarily contains the patterns it looks for.
+  '''(^|/)\.gitleaks\.toml$''',
+  '''(^|/)\.gitleaksignore$''',
+]
+
+# ===========================================================================
+# NOT ALLOWLISTED, DELIBERATELY:
+#
+#   .claude/ and every other agent-tooling directory — barri#240 found a live
+#     credential in .claude/settings.local.json. rolly and campfire-v2
+#     allowlisted .claude/ anyway; barri had it right. Agent dirs are scanned.
+#   docs/  archive/  artifacts/  planning/  .github/  supabase/  — every live
+#     finding in the 2026-07-26 audit was in one of these.
+#   *.md *.yml *.yaml *.sh *.cjs *.mjs — same.
+#   *.env.example / *.env.template — scanned. The placeholder regexes above are
+#     what keep them quiet, not a path exclusion. A real key pasted into an
+#     .example file is precisely the mistake this gate exists to catch.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# whatsapp-core specifics
+# ---------------------------------------------------------------------------
+
+[[allowlists]]
+description = "Counting-sequence auth token in the webhook signature test"
+regexes = ['''\b1234567890123456789012345678901[0-9]*\b''']
