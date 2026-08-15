@@ -59,6 +59,23 @@ export interface InboundLocation {
 }
 
 /**
+ * A normalized inbound interactive response (FYV-147): the customer tapped a
+ * quick-reply button, picked a list row, or submitted a Flow / native form.
+ * Providers map their own payload shapes onto this; downstream apps branch on
+ * `type` + `id`, never on the provider's raw JSON.
+ */
+export interface InboundInteractive {
+  /** Interactive subtype. `unknown` when the provider sent an unrecognized shape. */
+  type: 'button_reply' | 'list_reply' | 'flow_reply' | 'nfm_reply' | 'unknown';
+  /** Id of the tapped button / selected row / flow button (when present). */
+  id?: string;
+  /** Display title of the tapped button / selected row. */
+  title?: string;
+  /** Raw JSON string for Flow / native-form replies (Meta `response_json`). */
+  responseJson?: string;
+}
+
+/**
  * The common, typed inbound message every provider normalizes to. This is the
  * single contract downstream apps consume; no provider-specific shape leaks
  * past the adapter boundary except via {@link raw}.
@@ -83,6 +100,11 @@ export interface InboundMessage {
   media?: InboundMedia;
   /** Present when `contentType` is location. */
   location?: InboundLocation;
+  /**
+   * Present when `contentType` is interactive: the customer's button / list /
+   * Flow reply, normalized. `text` carries the reply title when available.
+   */
+  interaction?: InboundInteractive;
   /** Customer's WhatsApp profile name, when available. */
   senderName?: string;
   /** When the customer sent the message. */

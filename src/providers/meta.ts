@@ -14,6 +14,7 @@ import { validateInteractive } from '../interactive.js';
 import type {
   FetchLike,
   InboundContentType,
+  InboundInteractive,
   InboundMessage,
   MetaProviderConfig,
   OutboundInteractive,
@@ -56,6 +57,53 @@ function mapContentType(metaType: string): InboundContentType {
     default:
       return 'unknown';
   }
+}
+
+/** Map Meta's interactive subtype onto our normalized set. */
+function mapInteractiveType(metaType: unknown): InboundInteractive['type'] {
+  switch (metaType) {
+    case 'button_reply':
+    case 'list_reply':
+    case 'flow_reply':
+    case 'nfm_reply':
+      return metaType;
+    default:
+      return 'unknown';
+  }
+}
+
+/**
+ * Normalize Meta's inbound `interactive` object into {@link InboundInteractive}.
+ * Meta shapes (WhatsApp Cloud API webhook):
+ *  - `button_reply`: { id, title }
+ *  - `list_reply`:   { id, title }
+ *  - `flow_reply`:   { id, response_json }
+ *  - `nfm_reply`:    { name, response_json }
+ */
+function normalizeInboundInteractive(raw: Record<string, unknown>): InboundInteractive {
+  const type = mapInteractiveType(raw.type);
+  const buttonReply = raw.button_reply as { id?: unknown; title?: unknown } | undefined;
+  const listReply = raw.list_reply as { id?: unknown; title?: unknown } | undefined;
+  const flowReply = raw.flow_reply as { id?: unknown; response_json?: unknown } | undefined;
+  const nfmReply = raw.nfm_reply as { name?: unknown; response_json?: unknown } | undefined;
+
+  const interaction: InboundInteractive = { type };
+
+  if (buttonReply ?? listReply) {
+    const reply = (buttonReply ?? listReply) as { id?: unknown; title?: unknown };
+    if (typeof reply.id === 'string') interaction.id = reply.id;
+    if (typeof reply.title === 'string') interaction.title = reply.title;
+  } else if (flowReply ?? nfmReply) {
+    const reply = (flowReply ?? nfmReply) as { id?: unknown; response_json?: unknown };
+    if (typeof reply.id === 'string') interaction.id = reply.id;
+    const json = reply.response_json;
+    if (json !== undefined) {
+      interaction.responseJson =
+        typeof json === 'string' ? json : JSON.stringify(json);
+    }
+  }
+
+  return interaction;
 }
 
 /** Map an interactive message onto Meta's `interactive` object. */
@@ -291,6 +339,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
             audio?: { id?: string; mime_type?: string };
             document?: { id?: string; mime_type?: string; caption?: string; filename?: string };
             location?: { latitude?: number; longitude?: number; name?: string; address?: string };
+            interactive?: Record<string, unknown>;
           };
 
           const metaType = m.type ?? 'unknown';
@@ -341,6 +390,12 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
                   ...(m.location.name !== undefined ? { name: m.location.name } : {}),
                   ...(m.location.address !== undefined ? { address: m.location.address } : {}),
                 };
+              }
+              break;
+            case 'interactive':
+              if (m.interactive) {
+                msg.interaction = normalizeInboundInteractive(m.interactive);
+                msg.text = msg.interaction.title ?? '';
               }
               break;
             default:

@@ -8,6 +8,7 @@
 export type {
   WhatsAppProviderId,
   InboundContentType,
+  InboundInteractive,
   MediaKind,
   InboundMedia,
   InboundLocation,

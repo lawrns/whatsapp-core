@@ -1,6 +1,6 @@
 {
   "name": "@portfolio/whatsapp-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Provider-agnostic WhatsApp messaging core: Meta Cloud API + Twilio adapters, 24h session window, webhook signature verification, inbound normalization, media persistence, and opt-out compliance. Shared dependency for bien, campfire-v2, hablo, mexicasa, cobros.",
   "type": "module",
   "license": "UNLICENSED",
